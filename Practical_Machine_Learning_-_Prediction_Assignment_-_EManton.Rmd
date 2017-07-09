@@ -1,0 +1,130 @@
+---
+title: Practical Machine Learning  Human Activity Recognition
+author: "E. Manton"
+output: pdf_document
+---
+`r as.character(format(Sys.Date(), format="%B %d, %Y"))`
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Executive Summary
+The goal of this project is to _predict the manner_ in which six study participants performed dumbell lifts.  The participants were fitted with accelerometers on their belts, forearms, and upper arms.  The dumbells used by each participant were also fitted with accelerometers.  
+
+The data, provided by [Groupware@LES](http://groupware.les.inf.puc-rio.br/), was broken into [TEST](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) and [TRAINING](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)  sets. The development of the prediction model is described herein.  The prediction model was then applied Course Project Prediction Quiz for automated grading.  Results indicate that, with the Kappa statistic and the out-of-sample error, that our chosen Random Forest model will work well in predicting outcomes in the **TEST** data set.
+
+## The \textcolor{blue}{classe} Variable
+The variable _classe_ is the _dependent_ variable in the **TRAINING** data set.  It's importance is that, with the development of a prediction model for the given data, the _classe_ variable will be able to predict the outcomes of the cases provided in the **TEST** data set.
+
+## Prediction Variables
+The _Prediction Variables_ will be any variables within the **TRAINING** data set that contain values.  Variables containing 'N/A' won't be used as part of the prediction model.  Also, identifying columns (i.e. name, timestamp, etc.) will also be removed from the **TRAINING** data set because they are not relevant in predicting outcomes in the **TEST** data set. 
+
+## Building The Model
+### Load and Clean Data
+First we will load and clean both the **TEST** and **TRAINING** data sets, and set the seed.
+
+````{r load_and_clean_data}
+rm(list = ls())
+setwd('/Users/Mommy/OneDrive/Coursera/Data Science Specialization/Practical Machine Learning/Assignment')
+
+library(caret)
+
+training_data <- read.csv(file="my-pml-training.csv",na.strings=c('NA','','#DIV/0!'))
+test_data <- read.csv(file="my-pml-testing.csv",na.strings=c('NA','','#DIV/0!'))
+set.seed(23232)
+````
+
+### Remove NA Variables
+Remove variables from the **TEST** data set that contain only NA.  We do not want NA variables in the **TRAINING** set as part of the prediction model.
+````{r remove_na_variables}
+cols_with_NA<-colnames(test_data)[colSums(is.na(test_data)) > 0] 
+training_data<-training_data[,!(names(training_data) %in% cols_with_NA)]
+````
+
+### Remove NZV Variables
+NZV (near zero variance) variables have a low fraction of unique values within the sample, usually less than 10%.  These do not make good prediction variables, so we will remove them from the **TRAINING** data set using the _nearZeroVar()_ function.
+````{r remove_nza_variables}
+nzv <-nearZeroVar(training_data, saveMetrics=TRUE)
+training_data <- training_data[,nzv$nzv==FALSE]
+````
+### Remove Identifying Columns
+The first six variables of the **TRAINING** set are:
+  
+1. X 
+2. user_name 
+3. raw_timestamp_part_1 
+4. raw_timestamp_part_2 
+5. cvtd_timestamp
+6. num_window
+
+and as showing here from the **TRAINING** data set itself:
+
+````{r first_six_columns_of_training_data}
+training_data[1,c(1,2,3,4,5,6)]
+
+````
+These columns contain information identifying the participant, and do not factor in creating the prediction model.  We will remove them:
+````{r remove_identifying_columns}
+training_data <- training_data[,-(1:6)]
+````
+
+These columns are left in the **TRAINING** data set, and will be used to develop the prediction model:
+````{r show_column_headings}
+names(training_data)
+````
+
+## Cross Validation
+### Train the Data 
+For Cross Validation of the **TRAINING** data set, we will use the _trainControl()_ function within the _caret_ package, where paremeters:
+
+1. cv = cross validation
+2. number = numbers of folds (we will use two)
+3. verboseIter = create a log (set to FALSE since we do not need a log)
+
+````{r cross_validate}
+traincon <- trainControl(method = "cv", number=2, verboseIter=FALSE)
+
+````
+
+### Random Forest
+We will use the _Random Forest_ model with the prediction variables that we now have in the **TRAINING** data set, along with the _traincontrol_ arguments that we have established in the prior step, to get the value of the _classe_ variable:
+
+````{r random_forest}
+random_forest <- train(classe ~ ., data=training_data, method="rf",trControl=traincon)
+````
+
+### Final Model
+Now we fit the final model so that we may make predictions with the **TEST** data set:
+````{r final_model}
+random_forest$finalModel
+random_forest
+````
+### Accuracy
+At this point we should check our Random Forest model for accuracy by finding the Kappa statistic, which is a metric that compares an observed accuracy with a random choice, or expected accuracy. We will use the _max()_ function for this purpose, and with these values we can determine if our model will be a good predictor:
+
+````{r accuracy_and_kappy}
+max(random_forest$results$Accuracy)
+max(random_forest$results$Kappa)
+````
+
+## Expected Sample Error
+To find the out-of-sample error that our model has, we again apply the _max()_ function prepended with "1-".
+````{r out-of-sample-error}
+1-max(random_forest$results$Accuracy)
+````
+
+## Choices Made
+We made these choices in developing our model:
+
+1. exclude NA variables from the **TRAINING** data set
+2. exclude NZA variables from the **TRAINING** data set
+3. exclude the first six columns of identifying data from the **TRAINING** data set
+4. use the Random Forest model to predict
+
+
+## Plots
+
+```{r plot_random_forest}
+plot(random_forest)
+```
+
